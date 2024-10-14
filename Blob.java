@@ -10,8 +10,8 @@ public class Blob {
     //Global variable to toggle compression on or off
     private static boolean compressionEnabled = false;
     
-    //backs up a directory via making its tree given its path
-    public static void createTree (String directoryPath) throws IOException, NoSuchAlgorithmException, ObjectsDirectoryNotFoundException{
+    //backs up a directory via making its tree given its path and returns the tree file
+    public static String createTree (String directoryPath) throws IOException, NoSuchAlgorithmException, ObjectsDirectoryNotFoundException{
         File direct = new File (directoryPath);
 
         //checks if the directory exists
@@ -29,43 +29,38 @@ public class Blob {
             File [] directoryList = direct.listFiles();
             StringBuilder tree = new StringBuilder();
 
-            // Check if the directory is empty
-            if (directoryList == null || directoryList.length == 0) {
-                System.out.println("Empty directory: " + directoryPath);
-                tree.append("empty directory\n");  // Special marker for an empty directory
-            }
-
             //goes through the directory
-            for (int i=0; i<directoryList.length;i++){
+            for (int i=0; i<directoryList.length; i++){
                 //creates the current path for naming reasons
                 String pathAt = "";
                 if (directoryList[i].getParent()==null){
                     pathAt = directoryList[i].getName();
                 }
                 else{
-                    pathAt = directoryList[i].getPath();
+                    pathAt = directoryList[i].getParentFile().getName() + "/" + directoryList[i].getName();
                 }
 
                 if (directoryList[i].isDirectory()){
                     //recursively goes through this directory (depth first search)
                     createTree (directoryList[i].getPath());
                     //new entry into the tree string
-                    tree.append("tree " + generateSha1(directoryList[i].getPath()) + " " + pathAt + "\n");
+                    
+
+                    //existing bug ************************************************************DISREGARD******************************************************************
+                    tree.append("tree " + generateSha1(createTree(directoryList[i].getPath())) + " " + pathAt + "\n");
                 }
                 else{
-                    File newFile = directoryList[i];
-                    String fileContent = new String (Files.readAllBytes(Paths.get(pathAt)));
+                    String fileContent = new String (Files.readAllBytes(Paths.get(directoryList[i].getPath())));
                 
                     //new entry into the tree file
                     tree.append("blob "+ generateSha1(fileContent) + " " + pathAt + "\n");
 
                     //creates a new blob of the file
-                    createBlob(pathAt);
+                    createBlob(directoryList[i].getPath());
                 }
             }
 
             //creates a blob for the tree string by basically rewriting 
-            String name = direct.getName();
             String shaOfTree = generateSha1(tree.toString());
             //Checks if the objects directory exists
             if (!Files.exists(Paths.get("git/objects"))) {
@@ -76,22 +71,22 @@ public class Blob {
             Files.write(Paths.get("git/objects", shaOfTree), tree.toString().getBytes());
             
             //Writes a new line into the index
-            String fileName = Paths.get(directoryPath).getFileName().toString();
-            String indexEntry = "";
-            indexEntry = "tree " + shaOfTree + " " + directoryPath + "\n";
+            String indexEntry = "tree " + shaOfTree + " " + directoryPath + "\n";
             
             BufferedWriter bw = new BufferedWriter(new FileWriter("git/index", true));
             bw.append (indexEntry);
             bw.close();
+            return tree.toString();
 
         }
         catch (IOException e) {
             e.printStackTrace();
+            return "";
         }
     }
 
     //Generates a unique filename using SHA1 hash of file data
-    private static String generateSha1(String data) throws IOException, NoSuchAlgorithmException {
+    public static String generateSha1(String data) throws IOException, NoSuchAlgorithmException {
         //Creates SHA1 hash from the file content
         MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
         byte[] hashBytes = sha1.digest(data.getBytes());
@@ -104,7 +99,7 @@ public class Blob {
     }
 
     //Reads file content and compresses it if enabled
-    private static byte[] readFileContent(String filePath) throws IOException {
+    public static byte[] readFileContent(String filePath) throws IOException {
         byte[] fileBytes = Files.readAllBytes(Paths.get(filePath));
         if (compressionEnabled) {
             ByteArrayOutputStream byteStream = new ByteArrayOutputStream(); //output stream that writes the input data into a byte array
@@ -205,10 +200,14 @@ public class Blob {
             newDirectory.mkdir();
         }
         File newFile = new File ("direct/newFile.txt");
+        File emptDir = new File ("direct/directEmpt");
         StringBuilder sb2 = new StringBuilder("aoeunvoacwn");
         Files.write(Paths.get("direct/newFile.txt"), sb2.toString().getBytes(StandardCharsets.UTF_8));
         if (!newFile.exists()){
             newFile.createNewFile();
+        }
+        if (!emptDir.exists()){
+            emptDir.mkdir();
         }
         File newDirectory2 = new File ("direct/direct2");
         if (!newDirectory2.exists()){
@@ -222,7 +221,7 @@ public class Blob {
         }
 
         //creates a tree from the top directory
-        createTree("direct");
+        createTree("./direct");
 
         //checks the index entry
         BufferedReader br = Files.newBufferedReader(Paths.get("git/index"));
@@ -237,25 +236,26 @@ public class Blob {
             }    
         }
         br.close();
+        resetTestFiles();
     }
 
     // Removes test files: example.txt, the corresponding blob, and the index entry
     private static void resetTestFiles() throws IOException, NoSuchAlgorithmException {
-        //Creates string with 10,000 a's
-        StringBuilder sb = new StringBuilder("");
-        for (int i=0; i<10000; i++) {
-            sb.append("a");
-        }
-        //Deletes the blob file
-        try {
-            Files.write(Paths.get("example.txt"), sb.toString().getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        String sha1Hash = generateSha1(sb.toString());
-        Path blobFile = Paths.get("git/objects", sha1Hash);
-        Files.deleteIfExists(blobFile);
-        System.out.println("Deleted blob file: " + blobFile.toString());
+        // //Creates string with 10,000 a's
+        // StringBuilder sb = new StringBuilder("");
+        // for (int i=0; i<10000; i++) {
+        //     sb.append("a");
+        // }
+        // //Deletes the blob file
+        // try {
+        //     Files.write(Paths.get("example.txt"), sb.toString().getBytes(StandardCharsets.UTF_8));
+        // } catch (IOException e) {
+        //     e.printStackTrace();
+        // }
+        // String sha1Hash = generateSha1(sb.toString());
+        // Path blobFile = Paths.get("git/objects", sha1Hash);
+        // Files.deleteIfExists(blobFile);
+        // System.out.println("Deleted blob file: " + blobFile.toString());
 
         //Removes the line in the index file
         File indexFile = new File("git/index");
@@ -265,14 +265,14 @@ public class Blob {
             System.out.println("Removed the entry from the index file");
         }
 
-        //Deletes the example.txt file
-        Path exampleFile = Paths.get("example.txt");
-        Files.deleteIfExists(exampleFile);
-        System.out.println("Deleted example.txt");
+        // //Deletes the example.txt file
+        // Path exampleFile = Paths.get("example.txt");
+        // Files.deleteIfExists(exampleFile);
+        // System.out.println("Deleted example.txt");
 
-        //deletes the tree file
-        Path tree = Paths.get("tree");
-        Files.deleteIfExists(tree);
+        // //deletes the tree file
+        // Path tree = Paths.get("tree");
+        // Files.deleteIfExists(tree);
 
         //deletes everything in the objects directory
         File objects = new File ("git/objects");
@@ -280,6 +280,11 @@ public class Blob {
         for (int i =0;i<fileList.length;i++){
             fileList[i].delete();
         }
+
+        File git = new File ("./git");
+        git.delete();
+        Git newGit = new Git();
+        newGit.initGitRepo();
     }
 }
 
